@@ -1,150 +1,166 @@
-// Base de dados inicial dos treinos
-let treinos = {
-    A: [
-        { nome: "Supino Reto", detalhes: "4x10" },
-        { nome: "Tríceps Pulley", detalhes: "4x12" }
-    ],
-    B: [
-        { nome: "Puxada Alta", detalhes: "4x10" },
-        { nome: "Rosca Direta", detalhes: "3x12" }
-    ]
-};
+// Configuração do Supabase
+const SUPABASE_URL = "SEU_SUPABASE_URL";
+const SUPABASE_KEY = "SUA_SUPABASE_ANON_KEY";
+const supabase = @supabase/supabase-js.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let treinoAtual = 'A';
+// Estados locais da aplicação
+let listaTreinos = []; // Armazenará a lista de treinos vindos do banco
+let treinoAtualId = null; // ID do treino selecionado no momento
+let treinoAtualLetra = 'A';
 
-// Renderiza os botões das abas superiores (A, B, C...)
+// 1. CARREGAR DADOS DO BANCO
+async function carregarDados() {
+    // Busca os treinos ordenados por letra
+    const { data: treinos, error: errTreinos } = await supabase
+        .from('treinos')
+        .select('*')
+        .order('letra', { ascending: true });
+
+    if (errTreinos) return console.error(errTreinos);
+    listaTreinos = treinos;
+
+    // Se houver treinos salvos e nenhum selecionado, seleciona o primeiro
+    if (listaTreinos.length > 0 && !treinoAtualId) {
+        treinoAtualId = listaTreinos[0].id;
+        treinoAtualLetra = listaTreinos[0].letra;
+    }
+
+    renderizarAbas();
+    renderizarExercicios();
+}
+
+// 2. RENDERIZAR BOTÕES DE ABAS
 function renderizarAbas() {
     const containerAbas = document.getElementById('abas-treinos');
     containerAbas.innerHTML = '';
 
-    Object.keys(treinos).forEach(letra => {
-        const classeAtivo = letra === treinoAtual ? 'ativo' : '';
+    listaTreinos.forEach(treino => {
+        const classeAtivo = treino.id === treinoAtualId ? 'ativo' : '';
         containerAbas.innerHTML += `
-            <button class="btn-treino ${classeAtivo}" onclick="mudarTreino('${letra}')">
-                Treino ${letra}
+            <button class="btn-treino ${classeAtivo}" onclick="mudarTreino('${treino.id}', '${treino.letra}')">
+                Treino ${treino.letra}
             </button>
         `;
     });
 }
 
-// Renderiza a lista de exercícios do treino selecionado
-function renderizarExercicios() {
+// 3. RENDERIZAR LISTA DE EXERCÍCIOS
+async function renderizarExercicios() {
     const lista = document.getElementById('lista-exercicios');
     const titulo = document.getElementById('titulo-treino');
     
-    titulo.innerText = `Treino ${treinoAtual}`;
-    lista.innerHTML = '';
+    if (!treinoAtualId) {
+        titulo.innerText = "Nenhum treino";
+        lista.innerHTML = '<p style="color: #aaa; text-align: center; padding: 20px;">Crie um treino para começar.</p>';
+        return;
+    }
 
-    // Se o treino foi deletado ou está vazio, avisa o usuário
-    if (!treinos[treinoAtual] || treinos[treinoAtual].length === 0) {
+    titulo.innerText = `Treino ${treinoAtualLetra}`;
+    lista.innerHTML = '<p style="color: #aaa; text-align: center;">Carregando...</p>';
+
+    // Busca exercícios vinculados ao treino ativo
+    const { data: exercicios, error } = await supabase
+        .from('exercicios')
+        .select('*')
+        .eq('treino_id', treinoAtualId)
+        .order('created_at', { ascending: true });
+
+    if (error) return console.error(error);
+
+    lista.innerHTML = '';
+    if (exercicios.length === 0) {
         lista.innerHTML = '<p style="color: #aaa; text-align: center; padding: 20px;">Nenhum exercício cadastrado.</p>';
         return;
     }
 
-    treinos[treinoAtual].forEach((ex, index) => {
+    exercicios.forEach(ex => {
         lista.innerHTML += `
             <li class="item-exercicio ${ex.concluido ? 'concluido' : ''}">
-                <div class="info-ex" onclick="alternarConcluido(${index})" style="cursor: pointer; flex: 1;">
+                <div class="info-ex" onclick="alternarConcluido('${ex.id}', ${ex.concluido})" style="cursor: pointer; flex: 1;">
                     <strong>${ex.nome}</strong><br>
                     <span>${ex.detalhes}</span>
                 </div>
                 <div class="botoes-item">
-                    <button class="btn-item" onclick="editarExercicio(${index})" title="Editar">✏️</button>
-                    <button class="btn-item" onclick="removerExercicio(${index})" title="Excluir">🗑️</button>
+                    <button class="btn-item" onclick="editarExercicio('${ex.id}', '${ex.nome}', '${ex.detalhes}')" title="Editar">✏️</button>
+                    <button class="btn-item" onclick="removerExercicio('${ex.id}')" title="Excluir">🗑️</button>
                 </div>
             </li>
         `;
     });
 }
 
-function mudarTreino(tipo) {
-    treinoAtual = tipo;
+function mudarTreino(id, letra) {
+    treinoAtualId = id;
+    treinoAtualLetra = letra;
     renderizarAbas();
     renderizarExercicios();
 }
 
-function alternarConcluido(index) {
-    treinos[treinoAtual][index].concluido = !treinos[treinoAtual][index].concluido;
-    renderizarExercicios();
-}
-
-function adicionarExercicio(event) {
+// 4. OPERAÇÕES NO BANCO (CRUD EXERCÍCIOS)
+async function adicionarExercicio(event) {
     event.preventDefault();
+    if (!treinoAtualId) return alert("Crie um treino primeiro!");
+
     const nome = document.getElementById('novo-exercicio').value;
     const detalhes = document.getElementById('detalhes-exercicio').value;
 
-    if (!treinos[treinoAtual]) {
-        alert("Crie ou selecione um treino válido primeiro!");
-        return;
-    }
+    await supabase.from('exercicios').insert([{ treino_id: treinoAtualId, nome, detalhes }]);
 
-    treinos[treinoAtual].push({ nome, detalhes, concluido: false });
-    
     document.getElementById('novo-exercicio').value = '';
     document.getElementById('detalhes-exercicio').value = '';
     renderizarExercicios();
 }
 
-// NOVA FUNÇÃO: Edita o exercício usando caixas de prompt simples
-function editarExercicio(index) {
-    const ex = treinos[treinoAtual][index];
-    
-    const novoNome = prompt("Altere o nome do exercício:", ex.nome);
-    if (novoNome === null || novoNome.trim() === "") return; // Cancela se vazio ou cancelado
-
-    const novosDetalhes = prompt("Altere os detalhes (séries/repetições):", ex.detalhes);
-    if (novosDetalhes === null || novosDetalhes.trim() === "") return;
-
-    treinos[treinoAtual][index].nome = novoNome;
-    treinos[treinoAtual][index].detalhes = novosDetalhes;
+async function alternarConcluido(id, estadoAtual) {
+    await supabase.from('exercicios').update({ concluido: !estadoAtual }).eq('id', id);
     renderizarExercicios();
 }
 
-function removerExercicio(index) {
-    treinos[treinoAtual].splice(index, 1);
+async function editarExercicio(id, nomeAtual, detalhesAtual) {
+    const novoNome = prompt("Altere o nome do exercício:", nomeAtual);
+    if (!novoNome || novoNome.trim() === "") return;
+
+    const novosDetalhes = prompt("Altere os detalhes:", detalhesAtual);
+    if (!novosDetalhes || novosDetalhes.trim() === "") return;
+
+    await supabase.from('exercicios').update({ nome: novoNome, detalhes: novosDetalhes }).eq('id', id);
     renderizarExercicios();
 }
 
-// NOVA FUNÇÃO: Adiciona uma nova letra/treino à lista
-function criarNovoTreino() {
-    const letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const chavesAtuais = Object.keys(treinos);
-    
-    // Descobre a próxima letra disponível do alfabeto
-    let proximaLetra = letras.split('').find(letra => !chavesAtuais.includes(letra));
-
-    if (!proximaLetra) {
-        alert("Limite máximo de treinos atingido!");
-        return;
-    }
-
-    treinos[proximaLetra] = [];
-    treinoAtual = proximaLetra; // Muda o foco para o novo treino criado
-    atualizarInterface();
-}
-
-// NOVA FUNÇÃO: Remove o treino atual
-function deletarTreinoAtual() {
-    const chavesAtuais = Object.keys(treinos);
-    
-    if (chavesAtuais.length <= 1) {
-        alert("Você deve manter pelo menos um treino na sua lista!");
-        return;
-    }
-
-    if (confirm(`Tem certeza que deseja apagar todo o Treino ${treinoAtual}?`)) {
-        delete treinos[treinoAtual];
-        // Seleciona a primeira chave disponível como treino padrão
-        treinoAtual = Object.keys(treinos)[0];
-        atualizarInterface();
-    }
-}
-
-// Atualiza todas as partes da tela
-function atualizarInterface() {
-    renderizarAbas();
+async function removerExercicio(id) {
+    await supabase.from('exercicios').delete().eq('id', id);
     renderizarExercicios();
 }
 
-// Inicializa o sistema ao abrir a tela
-atualizarInterface();
+// 5. OPERAÇÕES NO BANCO (CRUD TREINOS)
+async function criarNovoTreino() {
+    const alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const letrasEmUso = listaTreinos.map(t => t.letra);
+    const proximaLetra = alfabeto.split('').find(letra => !letrasEmUso.includes(letra));
+
+    if (!proximaLetra) return alert("Limite máximo de treinos atingido!");
+
+    const { data, error } = await supabase.from('treinos').insert([{ letra: proximaLetra }]).select();
+    
+    if (error) return console.error(error);
+
+    // Foca automaticamente no treino recém criado
+    treinoAtualId = data[0].id;
+    treinoAtualLetra = data[0].letra;
+    carregarDados();
+}
+
+async function deletarTreinoAtual() {
+    if (!treinoAtualId) return;
+
+    if (confirm(`Apagar o Treino ${treinoAtualLetra} deletará todos os seus exercícios. Continuar?`)) {
+        // O banco deletará os exercícios automaticamente por conta do "on delete cascade"
+        await supabase.from('treinos').delete().eq('id', treinoAtualId);
+        
+        treinoAtualId = null; // Reseta seleção para recarregar o primeiro da lista
+        carregarDados();
+    }
+}
+
+// Inicializa a aplicação buscando dados do Supabase
+carregarDados();
