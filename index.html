@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Ficha de Academia Pro</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Ficha de Treino 💪</h1>
+            <p>Gerenciamento de treinos e exercícios</p>
+        </header>
+
+        <!-- Seletor de Treinos Dinâmico -->
+        <div class="gerenciador-abas">
+            <div id="abas-treinos" class="menu-treinos">
+                <!-- Inserido dinamicamente via JS -->
+            </div>
+            <div class="acoes-treino">
+                <button onclick="criarNovoTreino()" class="btn-acao">+ Novo Treino</button>
+                <button onclick="deletarTreinoAtual()" class="btn-acao btn-perigo">- Excluir Treino</button>
+            </div>
+        </div>
+
+        <!-- Lista de Exercícios -->
+        <main>
+            <h2 id="titulo-treino">Treino A</h2>
+            <ul id="lista-exercicios" class="lista">
+                <!-- Inserido via JS -->
+            </ul>
+
+            <!-- Formulário para adicionar exercício -->
+            <form id="form-exercicio" onsubmit="adicionarExercicio(event)">
+                <input type="text" id="novo-exercicio" placeholder="Exercício (ex: Supino)" required>
+                <input type="text" id="detalhes-exercicio" placeholder="Séries x Repetições (ex: 4x12)" required>
+                <button type="submit" class="btn-add">Adicionar Exercício</button>
+            </form>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
