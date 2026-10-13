@@ -1,7 +1,11 @@
 // Configuração do Supabase
-const SUPABASE_URL = "SEU_SUPABASE_URL";
-const SUPABASE_KEY = "SUA_SUPABASE_ANON_KEY";
-const supabase = @supabase/supabase-js.createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_URL = "https://tdgagcutzczneriobbtc.supabase.co";
+const SUPABASE_KEY = "sb_publishable_rxmejD6wjG0U6O5FyEt7Sw_hls-YHaa";
+
+const supabase = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
 
 // Estados locais da aplicação
 let listaTreinos = []; // Armazenará a lista de treinos vindos do banco
