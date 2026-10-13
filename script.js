@@ -140,6 +140,7 @@ function renderizarAbas() {
 // 5. CARREGAR EXERCÍCIOS
 // ==========================================
 
+
 async function renderizarExercicios() {
     const lista = $("lista-exercicios");
     lista.replaceChildren();
@@ -177,13 +178,28 @@ async function renderizarExercicios() {
             const item = document.createElement("li");
             item.className = "item-exercicio";
 
-            if (exercicio.concluido) {
+            const seriesFeitas = Number(exercicio.series_feitas || 0);
+
+            // Extrai a quantidade planejada de formatos como 4x12 ou 3×15.
+            const correspondencia = (exercicio.detalhes || "")
+                .match(/^\s*(\d+)\s*[x×]/i);
+
+            const totalSeries = correspondencia
+                ? Number(correspondencia[1])
+                : null;
+
+            if (
+                totalSeries !== null &&
+                seriesFeitas >= totalSeries &&
+                totalSeries > 0
+            ) {
                 item.classList.add("concluido");
             }
 
+            // Nome e detalhes
             const info = document.createElement("div");
             info.className = "info-ex";
-            info.style.cssText = "cursor:pointer; flex:1;";
+            info.style.cssText = "flex:1; min-width:0; cursor:pointer;";
 
             const nome = document.createElement("strong");
             nome.textContent = exercicio.nome;
@@ -197,6 +213,55 @@ async function renderizarExercicios() {
                 alternarConcluido(exercicio.id, !!exercicio.concluido);
             });
 
+            // Contador de séries
+            const contador = document.createElement("div");
+            contador.className = "contador-series";
+            contador.style.cssText =
+                "display:flex; align-items:center; gap:8px; flex-shrink:0;";
+
+            const botaoMenos = document.createElement("button");
+            botaoMenos.type = "button";
+            botaoMenos.textContent = "−";
+            botaoMenos.className = "btn-item";
+            botaoMenos.title = "Diminuir séries feitas";
+            botaoMenos.disabled = seriesFeitas <= 0;
+
+            botaoMenos.addEventListener("click", () => {
+                alterarSeriesFeitas(exercicio.id, seriesFeitas - 1);
+            });
+
+            const progresso = document.createElement("strong");
+            progresso.style.cssText =
+                "white-space:nowrap; min-width:40px; text-align:center;";
+
+            progresso.textContent = totalSeries !== null
+                ? `${seriesFeitas}/${totalSeries}`
+                : `${seriesFeitas} feitas`;
+
+            if (totalSeries !== null && seriesFeitas >= totalSeries) {
+                progresso.style.color = "#16a34a";
+            }
+
+            const botaoMais = document.createElement("button");
+            botaoMais.type = "button";
+            botaoMais.textContent = "+";
+            botaoMais.className = "btn-item";
+            botaoMais.title = "Registrar série concluída";
+
+            botaoMais.disabled =
+                totalSeries !== null && seriesFeitas >= totalSeries;
+
+            botaoMais.addEventListener("click", () => {
+                alterarSeriesFeitas(
+                    exercicio.id,
+                    seriesFeitas + 1,
+                    totalSeries
+                );
+            });
+
+            contador.append(botaoMenos, progresso, botaoMais);
+
+            // Botões de edição e exclusão
             const botoes = document.createElement("div");
             botoes.className = "botoes-item";
 
@@ -215,7 +280,8 @@ async function renderizarExercicios() {
             excluir.addEventListener("click", () => removerExercicio(exercicio.id));
 
             botoes.append(editar, excluir);
-            item.append(info, botoes);
+
+            item.append(info, contador, botoes);
             lista.appendChild(item);
         });
     } catch (error) {
@@ -223,8 +289,33 @@ async function renderizarExercicios() {
         lista.replaceChildren();
 
         const item = document.createElement("li");
-        item.textContent = "Não foi possível carregar os exercícios. Confira a mensagem de erro.";
+        item.textContent = "Não foi possível carregar os exercícios.";
         lista.appendChild(item);
+    }
+}
+
+
+// Registrar ou corrigir a quantidade de séries feitas
+async function alterarSeriesFeitas(id, novaQuantidade, totalSeries = null) {
+    novaQuantidade = Math.max(0, Math.floor(novaQuantidade));
+
+    if (totalSeries !== null) {
+        novaQuantidade = Math.min(novaQuantidade, totalSeries);
+    }
+
+    try {
+        const { error } = await db
+            .from("exercicios")
+            .update({ series_feitas: novaQuantidade })
+            .eq("id", id);
+
+        if (error) throw error;
+
+        await renderizarExercicios();
+
+        mostrarStatus(`Séries atualizadas: ${novaQuantidade}.`);
+    } catch (error) {
+        tratarErro("Não foi possível atualizar as séries", error);
     }
 }
 
