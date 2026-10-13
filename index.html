@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -13,35 +14,49 @@
             <p>Gerenciamento de treinos e exercícios</p>
         </header>
 
-        <!-- Seletor de Treinos Dinâmico -->
         <div class="gerenciador-abas">
-            <div id="abas-treinos" class="menu-treinos">
-                <!-- Inserido dinamicamente via JS -->
-            </div>
+            <div id="abas-treinos" class="menu-treinos"></div>
+
             <div class="acoes-treino">
-                <button onclick="criarNovoTreino()" class="btn-acao">+ Novo Treino</button>
-                <button onclick="deletarTreinoAtual()" class="btn-acao btn-perigo">- Excluir Treino</button>
+                <button type="button" id="btn-novo-treino" class="btn-acao">
+                    + Novo Treino
+                </button>
+                <button type="button" id="btn-excluir-treino" class="btn-acao btn-perigo">
+                    - Excluir Treino
+                </button>
             </div>
         </div>
 
-        <!-- Lista de Exercícios -->
         <main>
-            <h2 id="titulo-treino">Treino A</h2>
-            <ul id="lista-exercicios" class="lista">
-                <!-- Inserido via JS -->
-            </ul>
+            <h2 id="titulo-treino">Carregando treinos...</h2>
 
-            <!-- Formulário para adicionar exercício -->
-            <form id="form-exercicio" onsubmit="adicionarExercicio(event)">
-                <input type="text" id="novo-exercicio" placeholder="Exercício (ex: Supino)" required>
-                <input type="text" id="detalhes-exercicio" placeholder="Séries x Repetições (ex: 4x12)" required>
-                <button type="submit" class="btn-add">Adicionar Exercício</button>
+            <ul id="lista-exercicios" class="lista"></ul>
+
+            <form id="form-exercicio">
+                <input
+                    type="text"
+                    id="novo-exercicio"
+                    placeholder="Exercício (ex: Supino)"
+                    required
+                >
+
+                <input
+                    type="text"
+                    id="detalhes-exercicio"
+                    placeholder="Séries x repetições (ex: 4x12)"
+                    required
+                >
+
+                <button type="submit" class="btn-add">
+                    Adicionar Exercício
+                </button>
             </form>
+
+            <p id="mensagem-status" role="status" aria-live="polite"></p>
         </main>
     </div>
 
-    <!-- Adicione esta linha antes do seu script.js -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
