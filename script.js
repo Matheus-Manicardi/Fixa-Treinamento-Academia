@@ -1,197 +1,468 @@
-// Configuração do Supabase
+
+"use strict";
+
+// ==========================================
+// 1. CONFIGURAÇÃO DO SUPABASE
+// ==========================================
+
 const SUPABASE_URL = "https://tdgagcutzczneriobbtc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_rxmejD6wjG0U6O5FyEt7Sw_hls-YHaa";
 
-const supabase = window.supabase.createClient(
+if (!window.supabase) {
+    alert("A biblioteca do Supabase não carregou. Verifique sua conexão e o HTML.");
+    throw new Error("Biblioteca Supabase indisponível.");
+}
+
+const db = window.supabase.createClient(
     SUPABASE_URL,
     SUPABASE_KEY
 );
 
-// Estados locais da aplicação
-let listaTreinos = []; // Armazenará a lista de treinos vindos do banco
-let treinoAtualId = null; // ID do treino selecionado no momento
-let treinoAtualLetra = 'A';
+// ==========================================
+// 2. ESTADO DA APLICAÇÃO
+// ==========================================
 
-// 1. CARREGAR DADOS DO BANCO
-async function carregarDados() {
-    // Busca os treinos ordenados por letra
-    const { data: treinos, error: errTreinos } = await supabase
-        .from('treinos')
-        .select('*')
-        .order('letra', { ascending: true });
+let listaTreinos = [];
+let treinoAtualId = null;
+let treinoAtualLetra = null;
+let carregando = false;
 
-    if (errTreinos) return console.error(errTreinos);
-    listaTreinos = treinos;
+const $ = (id) => document.getElementById(id);
 
-    // Se houver treinos salvos e nenhum selecionado, seleciona o primeiro
-    if (listaTreinos.length > 0 && !treinoAtualId) {
-        treinoAtualId = listaTreinos[0].id;
-        treinoAtualLetra = listaTreinos[0].letra;
-    }
+function mostrarStatus(mensagem, erro = false) {
+    const elemento = $("mensagem-status");
 
-    renderizarAbas();
-    renderizarExercicios();
+    elemento.textContent = mensagem;
+    elemento.style.color = erro ? "#dc2626" : "#16a34a";
 }
 
-// 2. RENDERIZAR BOTÕES DE ABAS
+function tratarErro(operacao, error) {
+    console.error(`[${operacao}]`, error);
+
+    const mensagem = error?.message || "Erro desconhecido.";
+    mostrarStatus(`${operacao}: ${mensagem}`, true);
+}
+
+function definirBotoesDesabilitados(valor) {
+    $("btn-novo-treino").disabled = valor;
+    $("btn-excluir-treino").disabled = valor;
+    $("form-exercicio").querySelector("button[type='submit']").disabled = valor;
+}
+
+// ==========================================
+// 3. CARREGAR TREINOS DO BANCO
+// ==========================================
+
+async function carregarDados() {
+    if (carregando) return;
+
+    carregando = true;
+    $("titulo-treino").textContent = "Carregando...";
+    $("lista-exercicios").replaceChildren();
+
+    try {
+        const { data, error } = await db
+            .from("treinos")
+            .select("*")
+            .order("letra", { ascending: true });
+
+        if (error) throw error;
+
+        listaTreinos = data || [];
+
+        // Preserva o treino selecionado se ele ainda existir.
+        const treinoSelecionado = listaTreinos.find(
+            treino => String(treino.id) === String(treinoAtualId)
+        );
+
+        if (treinoSelecionado) {
+            treinoAtualId = treinoSelecionado.id;
+            treinoAtualLetra = treinoSelecionado.letra;
+        } else if (listaTreinos.length > 0) {
+            treinoAtualId = listaTreinos[0].id;
+            treinoAtualLetra = listaTreinos[0].letra;
+        } else {
+            treinoAtualId = null;
+            treinoAtualLetra = null;
+        }
+
+        renderizarAbas();
+
+        if (treinoAtualId !== null) {
+            await renderizarExercicios();
+        } else {
+            $("titulo-treino").textContent = "Nenhum treino cadastrado";
+
+            const aviso = document.createElement("li");
+            aviso.textContent = "Clique em + Novo Treino para começar.";
+            $("lista-exercicios").appendChild(aviso);
+        }
+    } catch (error) {
+        tratarErro("Erro ao carregar treinos", error);
+        $("titulo-treino").textContent = "Falha ao carregar treinos";
+    } finally {
+        carregando = false;
+    }
+}
+
+// ==========================================
+// 4. RENDERIZAR ABAS
+// ==========================================
+
 function renderizarAbas() {
-    const containerAbas = document.getElementById('abas-treinos');
-    containerAbas.innerHTML = '';
+    const container = $("abas-treinos");
+    container.replaceChildren();
 
     listaTreinos.forEach(treino => {
-        const classeAtivo = treino.id === treinoAtualId ? 'ativo' : '';
-        containerAbas.innerHTML += `
-            <button class="btn-treino ${classeAtivo}" onclick="mudarTreino('${treino.id}', '${treino.letra}')">
-                Treino ${treino.letra}
-            </button>
-        `;
+        const botao = document.createElement("button");
+
+        botao.type = "button";
+        botao.className = "btn-treino";
+        botao.textContent = `Treino ${treino.letra}`;
+
+        if (String(treino.id) === String(treinoAtualId)) {
+            botao.classList.add("ativo");
+        }
+
+        botao.addEventListener("click", () => {
+            treinoAtualId = treino.id;
+            treinoAtualLetra = treino.letra;
+
+            renderizarAbas();
+            renderizarExercicios();
+        });
+
+        container.appendChild(botao);
     });
 }
 
-// 3. RENDERIZAR LISTA DE EXERCÍCIOS
+// ==========================================
+// 5. CARREGAR EXERCÍCIOS
+// ==========================================
+
 async function renderizarExercicios() {
-    const lista = document.getElementById('lista-exercicios');
-    const titulo = document.getElementById('titulo-treino');
-    
-    if (!treinoAtualId) {
-        titulo.innerText = "Nenhum treino";
-        lista.innerHTML = '<p style="color: #aaa; text-align: center; padding: 20px;">Crie um treino para começar.</p>';
+    const lista = $("lista-exercicios");
+    lista.replaceChildren();
+
+    if (treinoAtualId === null) {
+        $("titulo-treino").textContent = "Nenhum treino";
         return;
     }
 
-    titulo.innerText = `Treino ${treinoAtualLetra}`;
-    lista.innerHTML = '<p style="color: #aaa; text-align: center;">Carregando...</p>';
+    $("titulo-treino").textContent = `Treino ${treinoAtualLetra}`;
 
-    // Busca exercícios vinculados ao treino ativo
-    const { data: exercicios, error } = await supabase
-        .from('exercicios')
-        .select('*')
-        .eq('treino_id', treinoAtualId)
-        .order('created_at', { ascending: true });
+    const carregandoItem = document.createElement("li");
+    carregandoItem.textContent = "Carregando exercícios...";
+    lista.appendChild(carregandoItem);
 
-    if (error) return console.error(error);
+    try {
+        const { data, error } = await db
+            .from("exercicios")
+            .select("*")
+            .eq("treino_id", treinoAtualId)
+            .order("created_at", { ascending: true });
 
-    lista.innerHTML = '';
-    if (exercicios.length === 0) {
-        lista.innerHTML = '<p style="color: #aaa; text-align: center; padding: 20px;">Nenhum exercício cadastrado.</p>';
-        return;
+        if (error) throw error;
+
+        lista.replaceChildren();
+
+        if (!data || data.length === 0) {
+            const item = document.createElement("li");
+            item.textContent = "Nenhum exercício cadastrado neste treino.";
+            lista.appendChild(item);
+            return;
+        }
+
+        data.forEach(exercicio => {
+            const item = document.createElement("li");
+            item.className = "item-exercicio";
+
+            if (exercicio.concluido) {
+                item.classList.add("concluido");
+            }
+
+            const info = document.createElement("div");
+            info.className = "info-ex";
+            info.style.cssText = "cursor:pointer; flex:1;";
+
+            const nome = document.createElement("strong");
+            nome.textContent = exercicio.nome;
+
+            const detalhes = document.createElement("span");
+            detalhes.textContent = exercicio.detalhes || "";
+
+            info.append(nome, document.createElement("br"), detalhes);
+
+            info.addEventListener("click", () => {
+                alternarConcluido(exercicio.id, !!exercicio.concluido);
+            });
+
+            const botoes = document.createElement("div");
+            botoes.className = "botoes-item";
+
+            const editar = document.createElement("button");
+            editar.type = "button";
+            editar.className = "btn-item";
+            editar.textContent = "✏️";
+            editar.title = "Editar exercício";
+            editar.addEventListener("click", () => editarExercicio(exercicio));
+
+            const excluir = document.createElement("button");
+            excluir.type = "button";
+            excluir.className = "btn-item";
+            excluir.textContent = "🗑️";
+            excluir.title = "Excluir exercício";
+            excluir.addEventListener("click", () => removerExercicio(exercicio.id));
+
+            botoes.append(editar, excluir);
+            item.append(info, botoes);
+            lista.appendChild(item);
+        });
+    } catch (error) {
+        tratarErro("Erro ao carregar exercícios", error);
+        lista.replaceChildren();
+
+        const item = document.createElement("li");
+        item.textContent = "Não foi possível carregar os exercícios. Confira a mensagem de erro.";
+        lista.appendChild(item);
     }
-
-    exercicios.forEach(ex => {
-        lista.innerHTML += `
-            <li class="item-exercicio ${ex.concluido ? 'concluido' : ''}">
-                <div class="info-ex" onclick="alternarConcluido('${ex.id}', ${ex.concluido})" style="cursor: pointer; flex: 1;">
-                    <strong>${ex.nome}</strong><br>
-                    <span>${ex.detalhes}</span>
-                </div>
-                <div class="botoes-item">
-                    <button class="btn-item" onclick="editarExercicio('${ex.id}', '${ex.nome}', '${ex.detalhes}')" title="Editar">✏️</button>
-                    <button class="btn-item" onclick="removerExercicio('${ex.id}')" title="Excluir">🗑️</button>
-                </div>
-            </li>
-        `;
-    });
 }
 
-function mudarTreino(id, letra) {
-    treinoAtualId = id;
-    treinoAtualLetra = letra;
-    renderizarAbas();
-    renderizarExercicios();
-}
-
-// 4. OPERAÇÕES NO BANCO (CRUD EXERCÍCIOS)
+// ==========================================
+// 6. ADICIONAR EXERCÍCIO
+// ==========================================
 
 async function adicionarExercicio(event) {
     event.preventDefault();
 
-    if (!treinoAtualId) {
-        alert("Crie um treino primeiro!");
+    if (treinoAtualId === null) {
+        mostrarStatus("Crie ou selecione um treino antes de adicionar exercícios.", true);
         return;
     }
 
-    const nome = document.getElementById('novo-exercicio').value.trim();
-    const detalhes = document.getElementById('detalhes-exercicio').value.trim();
+    const nome = $("novo-exercicio").value.trim();
+    const detalhes = $("detalhes-exercicio").value.trim();
 
     if (!nome || !detalhes) {
-        alert("Preencha o exercício e os detalhes.");
+        mostrarStatus("Preencha o nome e os detalhes do exercício.", true);
         return;
     }
 
-    const { data, error } = await supabase
-        .from('exercicios')
-        .insert([{
-            treino_id: treinoAtualId,
-            nome: nome,
-            detalhes: detalhes
-        }])
-        .select();
+    definirBotoesDesabilitados(true);
 
-    if (error) {
-        console.error("Erro ao salvar exercício:", error);
-        alert("Não foi possível salvar o exercício: " + error.message);
-        return;
+    try {
+        const { data, error } = await db
+            .from("exercicios")
+            .insert({
+                treino_id: treinoAtualId,
+                nome,
+                detalhes,
+                concluido: false
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        $("form-exercicio").reset();
+
+        await renderizarExercicios();
+
+        mostrarStatus(`Exercício "${data.nome}" salvo com sucesso.`);
+        console.log("Exercício gravado no Supabase:", data);
+    } catch (error) {
+        tratarErro("Não foi possível salvar o exercício", error);
+    } finally {
+        definirBotoesDesabilitados(false);
     }
-
-    document.getElementById('novo-exercicio').value = '';
-    document.getElementById('detalhes-exercicio').value = '';
-
-    await renderizarExercicios();
-
-    console.log("Exercício salvo com sucesso:", data);
 }
 
+// ==========================================
+// 7. MARCAR COMO CONCLUÍDO
+// ==========================================
 
 async function alternarConcluido(id, estadoAtual) {
-    await supabase.from('exercicios').update({ concluido: !estadoAtual }).eq('id', id);
-    renderizarExercicios();
-}
+    try {
+        const { error } = await db
+            .from("exercicios")
+            .update({ concluido: !estadoAtual })
+            .eq("id", id);
 
-async function editarExercicio(id, nomeAtual, detalhesAtual) {
-    const novoNome = prompt("Altere o nome do exercício:", nomeAtual);
-    if (!novoNome || novoNome.trim() === "") return;
+        if (error) throw error;
 
-    const novosDetalhes = prompt("Altere os detalhes:", detalhesAtual);
-    if (!novosDetalhes || novosDetalhes.trim() === "") return;
-
-    await supabase.from('exercicios').update({ nome: novoNome, detalhes: novosDetalhes }).eq('id', id);
-    renderizarExercicios();
-}
-
-async function removerExercicio(id) {
-    await supabase.from('exercicios').delete().eq('id', id);
-    renderizarExercicios();
-}
-
-// 5. OPERAÇÕES NO BANCO (CRUD TREINOS)
-async function criarNovoTreino() {
-    const alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const letrasEmUso = listaTreinos.map(t => t.letra);
-    const proximaLetra = alfabeto.split('').find(letra => !letrasEmUso.includes(letra));
-
-    if (!proximaLetra) return alert("Limite máximo de treinos atingido!");
-
-    const { data, error } = await supabase.from('treinos').insert([{ letra: proximaLetra }]).select();
-    
-    if (error) return console.error(error);
-
-    // Foca automaticamente no treino recém criado
-    treinoAtualId = data[0].id;
-    treinoAtualLetra = data[0].letra;
-    carregarDados();
-}
-
-async function deletarTreinoAtual() {
-    if (!treinoAtualId) return;
-
-    if (confirm(`Apagar o Treino ${treinoAtualLetra} deletará todos os seus exercícios. Continuar?`)) {
-        // O banco deletará os exercícios automaticamente por conta do "on delete cascade"
-        await supabase.from('treinos').delete().eq('id', treinoAtualId);
-        
-        treinoAtualId = null; // Reseta seleção para recarregar o primeiro da lista
-        carregarDados();
+        await renderizarExercicios();
+        mostrarStatus("Status do exercício atualizado.");
+    } catch (error) {
+        tratarErro("Não foi possível atualizar o exercício", error);
     }
 }
 
-// Inicializa a aplicação buscando dados do Supabase
+// ==========================================
+// 8. EDITAR EXERCÍCIO
+// ==========================================
+
+async function editarExercicio(exercicio) {
+    const nome = prompt("Nome do exercício:", exercicio.nome);
+    if (nome === null) return;
+
+    const nomeFinal = nome.trim();
+
+    if (!nomeFinal) {
+        mostrarStatus("O nome do exercício não pode ficar vazio.", true);
+        return;
+    }
+
+    const detalhes = prompt("Séries e repetições:", exercicio.detalhes || "");
+    if (detalhes === null) return;
+
+    const detalhesFinal = detalhes.trim();
+
+    if (!detalhesFinal) {
+        mostrarStatus("Informe as séries e repetições.", true);
+        return;
+    }
+
+    try {
+        const { error } = await db
+            .from("exercicios")
+            .update({
+                nome: nomeFinal,
+                detalhes: detalhesFinal
+            })
+            .eq("id", exercicio.id);
+
+        if (error) throw error;
+
+        await renderizarExercicios();
+        mostrarStatus("Exercício atualizado com sucesso.");
+    } catch (error) {
+        tratarErro("Não foi possível editar o exercício", error);
+    }
+}
+
+// ==========================================
+// 9. EXCLUIR EXERCÍCIO
+// ==========================================
+
+async function removerExercicio(id) {
+    if (!confirm("Deseja excluir este exercício?")) return;
+
+    try {
+        const { error } = await db
+            .from("exercicios")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
+
+        await renderizarExercicios();
+        mostrarStatus("Exercício excluído.");
+    } catch (error) {
+        tratarErro("Não foi possível excluir o exercício", error);
+    }
+}
+
+// ==========================================
+// 10. CRIAR NOVO TREINO
+// ==========================================
+
+async function criarNovoTreino() {
+    const letrasEmUso = new Set(listaTreinos.map(t => t.letra));
+    let proximaLetra = null;
+
+    for (let i = 0; i < 26; i++) {
+        const letra = String.fromCharCode(65 + i);
+
+        if (!letrasEmUso.has(letra)) {
+            proximaLetra = letra;
+            break;
+        }
+    }
+
+    if (!proximaLetra) {
+        mostrarStatus("Limite de 26 treinos atingido.", true);
+        return;
+    }
+
+    definirBotoesDesabilitados(true);
+
+    try {
+        const { data, error } = await db
+            .from("treinos")
+            .insert({ letra: proximaLetra })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        treinoAtualId = data.id;
+        treinoAtualLetra = data.letra;
+
+        await carregarDados();
+        mostrarStatus(`Treino ${data.letra} criado com sucesso.`);
+    } catch (error) {
+        tratarErro("Não foi possível criar o treino", error);
+    } finally {
+        definirBotoesDesabilitados(false);
+    }
+}
+
+// ==========================================
+// 11. EXCLUIR TREINO
+// ==========================================
+
+async function deletarTreinoAtual() {
+    if (treinoAtualId === null) {
+        mostrarStatus("Não há treino selecionado.", true);
+        return;
+    }
+
+    if (!confirm(
+        `Deseja apagar o Treino ${treinoAtualLetra} e todos os seus exercícios?`
+    )) {
+        return;
+    }
+
+    const idExcluido = treinoAtualId;
+
+    definirBotoesDesabilitados(true);
+
+    try {
+        // Exclui primeiro os exercícios para não depender de CASCADE.
+        const { error: erroExercicios } = await db
+            .from("exercicios")
+            .delete()
+            .eq("treino_id", idExcluido);
+
+        if (erroExercicios) throw erroExercicios;
+
+        const { error: erroTreino } = await db
+            .from("treinos")
+            .delete()
+            .eq("id", idExcluido);
+
+        if (erroTreino) throw erroTreino;
+
+        treinoAtualId = null;
+        treinoAtualLetra = null;
+
+        await carregarDados();
+        mostrarStatus("Treino excluído com sucesso.");
+    } catch (error) {
+        tratarErro("Não foi possível excluir o treino", error);
+    } finally {
+        definirBotoesDesabilitados(false);
+    }
+}
+
+// ==========================================
+// 12. INICIAR A APLICAÇÃO
+// ==========================================
+
+$("form-exercicio").addEventListener("submit", adicionarExercicio);
+
+$("btn-novo-treino").addEventListener("click", criarNovoTreino);
+
+$("btn-excluir-treino").addEventListener("click", deletarTreinoAtual);
+
 carregarDados();
