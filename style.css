@@ -138,3 +138,49 @@ input {
 }
 
 .btn-add:hover { background: #43a047; }
+
+
+.item-exercicio {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.info-ex {
+    flex: 1;
+    min-width: 120px;
+}
+
+.contador-series {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.contador-series button {
+    min-width: 32px;
+    min-height: 32px;
+    cursor: pointer;
+}
+
+.contador-series button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.contador-series strong {
+    font-size: 14px;
+}
+
+@media (max-width: 480px) {
+    .item-exercicio {
+        gap: 8px;
+    }
+
+    .botoes-item {
+        display: flex;
+        gap: 4px;
+    }
+}
+
