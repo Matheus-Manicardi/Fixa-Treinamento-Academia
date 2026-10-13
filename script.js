@@ -101,19 +101,46 @@ function mudarTreino(id, letra) {
 }
 
 // 4. OPERAÇÕES NO BANCO (CRUD EXERCÍCIOS)
+
 async function adicionarExercicio(event) {
     event.preventDefault();
-    if (!treinoAtualId) return alert("Crie um treino primeiro!");
 
-    const nome = document.getElementById('novo-exercicio').value;
-    const detalhes = document.getElementById('detalhes-exercicio').value;
+    if (!treinoAtualId) {
+        alert("Crie um treino primeiro!");
+        return;
+    }
 
-    await supabase.from('exercicios').insert([{ treino_id: treinoAtualId, nome, detalhes }]);
+    const nome = document.getElementById('novo-exercicio').value.trim();
+    const detalhes = document.getElementById('detalhes-exercicio').value.trim();
+
+    if (!nome || !detalhes) {
+        alert("Preencha o exercício e os detalhes.");
+        return;
+    }
+
+    const { data, error } = await supabase
+        .from('exercicios')
+        .insert([{
+            treino_id: treinoAtualId,
+            nome: nome,
+            detalhes: detalhes
+        }])
+        .select();
+
+    if (error) {
+        console.error("Erro ao salvar exercício:", error);
+        alert("Não foi possível salvar o exercício: " + error.message);
+        return;
+    }
 
     document.getElementById('novo-exercicio').value = '';
     document.getElementById('detalhes-exercicio').value = '';
-    renderizarExercicios();
+
+    await renderizarExercicios();
+
+    console.log("Exercício salvo com sucesso:", data);
 }
+
 
 async function alternarConcluido(id, estadoAtual) {
     await supabase.from('exercicios').update({ concluido: !estadoAtual }).eq('id', id);
